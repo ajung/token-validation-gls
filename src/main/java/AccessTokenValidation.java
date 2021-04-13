@@ -1,32 +1,33 @@
-import com.nimbusds.jose.JOSEException;
-import com.nimbusds.jose.JWSAlgorithm;
-import com.nimbusds.jose.proc.BadJOSEException;
-import com.nimbusds.jwt.JWT;
-import com.nimbusds.jwt.JWTParser;
-import com.nimbusds.oauth2.sdk.id.ClientID;
-import com.nimbusds.oauth2.sdk.id.Issuer;
-
-import com.nimbusds.openid.connect.sdk.validators.IDTokenValidator;
+import com.nimbusds.jose.*;
+import com.nimbusds.jose.jwk.source.*;
+import com.nimbusds.jose.proc.*;
+import com.nimbusds.jwt.*;
+import com.nimbusds.jwt.proc.*;
+import net.minidev.json.JSONObject;
 
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.ParseException;
+import java.util.Arrays;
+import java.util.HashSet;
 
 public class AccessTokenValidation {
-    public boolean validate(String tokenString) throws MalformedURLException, ParseException {
-        Issuer iss = new Issuer("https://auth-dev.dc.gls-group.eu/auth/realms/gls");
-        ClientID clientID = new ClientID("account");
-        JWSAlgorithm jwsAlg = JWSAlgorithm.RS256;
-        URL jwkSetURL = new URL("https://auth-dev.dc.gls-group.eu/auth/realms/gls/protocol/openid-connect/certs");
-        IDTokenValidator validator = new IDTokenValidator(iss, clientID, jwsAlg, jwkSetURL);
-        JWT idToken = JWTParser.parse(tokenString);
-        try {
-            validator.validate(idToken, null);
-            return true;
-        } catch (BadJOSEException e) {
-            return false;
-        } catch (JOSEException e) {
-            return false;
-        }
+
+    public JSONObject validate(String accessToken ) throws MalformedURLException, BadJOSEException, ParseException, JOSEException {
+
+        ConfigurableJWTProcessor<SecurityContext> jwtProcessor =
+                new DefaultJWTProcessor<>();
+        JWKSource<SecurityContext> keySource =
+                new RemoteJWKSet<>(new URL("https://auth-qs.dc.gls-group.eu/auth/realms/gls/protocol/openid-connect/certs"));
+        JWSAlgorithm expectedJWSAlg = JWSAlgorithm.RS256;
+        JWSKeySelector<SecurityContext> keySelector =
+                new JWSVerificationKeySelector<>(expectedJWSAlg, keySource);
+        jwtProcessor.setJWSKeySelector(keySelector);
+
+        jwtProcessor.setJWTClaimsSetVerifier(new DefaultJWTClaimsVerifier(
+                new JWTClaimsSet.Builder().issuer("https://auth-qs.dc.gls-group.eu/auth/realms/gls").build(),
+                new HashSet<>(Arrays.asList("sub"))));
+        JWTClaimsSet claimsSet = jwtProcessor.process(accessToken, null);
+        return claimsSet.toJSONObject();
     }
 }
